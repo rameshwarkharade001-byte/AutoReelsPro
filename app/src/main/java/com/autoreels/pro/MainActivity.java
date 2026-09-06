@@ -1,82 +1,95 @@
 package com.autoreels.pro;
 
-import android.accessibilityservice.AccessibilityService;
-import android.accessibilityservice.GestureDescription;
-import android.graphics.Path;
-import android.os.Handler;
-import android.os.Looper;
-import android.util.DisplayMetrics;
-import android.view.accessibility.AccessibilityEvent;
+import android.app.Activity;
+import android.content.Intent;
+import android.graphics.Color;
+import android.graphics.Typeface;
+import android.graphics.drawable.GradientDrawable;
+import android.os.Bundle;
+import android.provider.Settings;
+import android.view.Gravity;
+import android.widget.Button;
+import android.widget.LinearLayout;
+import android.widget.TextView;
 
-public class AutoScrollService extends AccessibilityService {
-
-    private Handler handler = new Handler(Looper.getMainLooper());
-    private boolean isRunning = false;
-    private long scrollInterval = 12000; // 12 Seconds per reel
-
-    private Runnable scrollRunnable = new Runnable() {
-        @Override
-        public void run() {
-            if (isRunning) {
-                performSwipe();
-                handler.postDelayed(this, scrollInterval);
-            }
-        }
-    };
-
+public class MainActivity extends Activity {
     @Override
-    public void onAccessibilityEvent(AccessibilityEvent event) {
-        if (event == null || event.getPackageName() == null) return;
-        String pkg = event.getPackageName().toString().toLowerCase();
+    protected void onCreate(Bundle savedInstanceState) {
+        super.onCreate(savedInstanceState);
 
-        boolean isTargetApp = pkg.contains("instagram") || 
-                              pkg.contains("youtube") || 
-                              pkg.contains("katana") || 
-                              pkg.contains("facebook");
+        LinearLayout root = new LinearLayout(this);
+        root.setOrientation(LinearLayout.VERTICAL);
+        root.setPadding(60, 100, 60, 60);
+        root.setGravity(Gravity.CENTER_HORIZONTAL);
+        root.setBackgroundColor(Color.parseColor("#0B0F19"));
 
-        if (isTargetApp) {
-            if (!isRunning) {
-                isRunning = true;
-                handler.removeCallbacks(scrollRunnable);
-                handler.postDelayed(scrollRunnable, scrollInterval);
-            }
-        } else {
-            if (isRunning) {
-                isRunning = false;
-                handler.removeCallbacks(scrollRunnable);
-            }
-        }
-    }
+        TextView title = new TextView(this);
+        title.setText("AutoScroll Studio");
+        title.setTextSize(28);
+        title.setTypeface(Typeface.DEFAULT_BOLD);
+        title.setTextColor(Color.parseColor("#FFFFFF"));
+        title.setGravity(Gravity.CENTER);
+        root.addView(title);
 
-    private void performSwipe() {
-        DisplayMetrics metrics = getResources().getDisplayMetrics();
-        int width = metrics.widthPixels;
-        int height = metrics.heightPixels;
+        TextView subtitle = new TextView(this);
+        subtitle.setText("Hands-Free Social Experience");
+        subtitle.setTextSize(14);
+        subtitle.setTextColor(Color.parseColor("#64748B"));
+        subtitle.setGravity(Gravity.CENTER);
+        subtitle.setPadding(0, 8, 0, 80);
+        root.addView(subtitle);
 
-        float startX = width / 2f;
-        float startY = height * 0.82f;
-        float endX = width / 2f;
-        float endY = height * 0.18f;
+        LinearLayout card = new LinearLayout(this);
+        card.setOrientation(LinearLayout.VERTICAL);
+        card.setPadding(50, 50, 50, 50);
+        
+        GradientDrawable cardBg = new GradientDrawable();
+        cardBg.setColor(Color.parseColor("#161F30"));
+        cardBg.setCornerRadius(28);
+        card.setBackground(cardBg);
 
-        Path swipePath = new Path();
-        swipePath.moveTo(startX, startY);
-        swipePath.lineTo(endX, endY);
+        TextView statusLabel = new TextView(this);
+        statusLabel.setText("SUPPORTED APPS");
+        statusLabel.setTextSize(11);
+        statusLabel.setTextColor(Color.parseColor("#38BDF8"));
+        statusLabel.setTypeface(Typeface.DEFAULT_BOLD);
+        card.addView(statusLabel);
 
-        GestureDescription.Builder builder = new GestureDescription.Builder();
-        builder.addStroke(new GestureDescription.StrokeDescription(swipePath, 0, 240));
-        dispatchGesture(builder.build(), null, null);
-    }
+        TextView appsLabel = new TextView(this);
+        appsLabel.setText("Instagram  •  YouTube Shorts  •  Facebook");
+        appsLabel.setTextSize(14);
+        appsLabel.setTextColor(Color.parseColor("#E2E8F0"));
+        appsLabel.setPadding(0, 10, 0, 40);
+        card.addView(appsLabel);
 
-    @Override
-    public void onInterrupt() {
-        isRunning = false;
-        handler.removeCallbacks(scrollRunnable);
-    }
+        TextView info = new TextView(this);
+        info.setText("Enable the engine service once. Videos will automatically glide to the next one smoothly.");
+        info.setTextSize(13);
+        info.setTextColor(Color.parseColor("#94A3B8"));
+        info.setLineSpacing(1.2f, 1.2f);
+        info.setPadding(0, 0, 0, 40);
+        card.addView(info);
 
-    @Override
-    public void onDestroy() {
-        super.onDestroy();
-        isRunning = false;
-        handler.removeCallbacks(scrollRunnable);
+        Button activateBtn = new Button(this);
+        activateBtn.setText("ACTIVATE SERVICE");
+        activateBtn.setTextSize(15);
+        activateBtn.setTextColor(Color.parseColor("#0F172A"));
+        activateBtn.setTypeface(Typeface.DEFAULT_BOLD);
+
+        GradientDrawable btnBg = new GradientDrawable();
+        btnBg.setColor(Color.parseColor("#38BDF8"));
+        btnBg.setCornerRadius(20);
+        activateBtn.setBackground(btnBg);
+        activateBtn.setPadding(30, 35, 30, 35);
+
+        activateBtn.setOnClickListener(v -> {
+            Intent intent = new Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS);
+            startActivity(intent);
+        });
+
+        card.addView(activateBtn);
+        root.addView(card);
+
+        setContentView(root);
     }
 }
