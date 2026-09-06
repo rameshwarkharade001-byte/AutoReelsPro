@@ -2,73 +2,100 @@ package com.autoreels.pro;
 
 import android.app.Activity;
 import android.content.Intent;
-import android.net.Uri;
-import android.os.Build;
+import android.graphics.Color;
+import android.graphics.Typeface;
+import android.graphics.drawable.GradientDrawable;
 import android.os.Bundle;
 import android.provider.Settings;
+import android.view.Gravity;
 import android.widget.Button;
 import android.widget.LinearLayout;
 import android.widget.TextView;
-import android.graphics.Color;
-import android.view.Gravity;
 
 public class MainActivity extends Activity {
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
 
-        LinearLayout layout = new LinearLayout(this);
-        layout.setOrientation(LinearLayout.VERTICAL);
-        layout.setPadding(60, 100, 60, 60);
-        layout.setGravity(Gravity.CENTER_HORIZONTAL);
-        layout.setBackgroundColor(Color.parseColor("#F9FAFB"));
+        // Main Background: Dark Slate #0B0F19
+        LinearLayout root = new LinearLayout(this);
+        root.setOrientation(LinearLayout.VERTICAL);
+        root.setPadding(60, 100, 60, 60);
+        root.setGravity(Gravity.CENTER_HORIZONTAL);
+        root.setBackgroundColor(Color.parseColor("#0B0F19"));
 
+        // Title
         TextView title = new TextView(this);
-        title.setText("Auto Reels Pro");
-        title.setTextSize(26);
-        title.setTextColor(Color.parseColor("#111827"));
-        title.setPadding(0, 0, 0, 30);
-        layout.addView(title);
+        title.setText("AutoScroll Studio");
+        title.setTextSize(28);
+        title.setTypeface(Typeface.DEFAULT_BOLD);
+        title.setTextColor(Color.parseColor("#FFFFFF"));
+        title.setGravity(Gravity.CENTER);
+        root.addView(title);
 
-        TextView desc = new TextView(this);
-        desc.setText("Instagram, YouTube आणि Facebook रील्स आपोआप स्क्रोल करण्यासाठी खालील दोन्ही परमिशन चालू करा:");
-        desc.setTextSize(14);
-        desc.setTextColor(Color.parseColor("#4B5563"));
-        desc.setPadding(0, 0, 0, 50);
-        layout.addView(desc);
+        // Subtitle
+        TextView subtitle = new TextView(this);
+        subtitle.setText("Hands-Free Social Experience");
+        subtitle.setTextSize(14);
+        subtitle.setTextColor(Color.parseColor("#64748B"));
+        subtitle.setGravity(Gravity.CENTER);
+        subtitle.setPadding(0, 8, 0, 80);
+        root.addView(subtitle);
 
-        // Overlay Permission Button
-        Button overlayBtn = new Button(this);
-        overlayBtn.setText("1. फ्लोटिंग ओव्हरले परमिशन द्या");
-        overlayBtn.setBackgroundColor(Color.parseColor("#2563EB"));
-        overlayBtn.setTextColor(Color.WHITE);
-        overlayBtn.setOnClickListener(v -> {
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
-                if (!Settings.canDrawOverlays(this)) {
-                    Intent intent = new Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION,
-                            Uri.parse("package:" + getPackageName()));
-                    startActivity(intent);
-                }
-            }
-        });
-        layout.addView(overlayBtn);
+        // Card Container
+        LinearLayout card = new LinearLayout(this);
+        card.setOrientation(LinearLayout.VERTICAL);
+        card.setPadding(50, 50, 50, 50);
+        
+        GradientDrawable cardBg = new GradientDrawable();
+        cardBg.setColor(Color.parseColor("#161F30"));
+        cardBg.setCornerRadius(28);
+        card.setBackground(cardBg);
 
-        // Spacer
-        TextView spacer = new TextView(this);
-        spacer.setHeight(30);
-        layout.addView(spacer);
+        // Feature Indicator
+        TextView statusLabel = new TextView(this);
+        statusLabel.setText("SUPPORTED APPS");
+        statusLabel.setTextSize(11);
+        statusLabel.setTextColor(Color.parseColor("#38BDF8"));
+        statusLabel.setTypeface(Typeface.DEFAULT_BOLD);
+        card.addView(statusLabel);
 
-        // Accessibility Permission Button
-        Button accessBtn = new Button(this);
-        accessBtn.setText("2. ऑटो-स्क्रोल सर्व्हिस चालू करा");
-        accessBtn.setBackgroundColor(Color.parseColor("#059669"));
-        accessBtn.setTextColor(Color.WHITE);
-        accessBtn.setOnClickListener(v -> {
+        TextView appsLabel = new TextView(this);
+        appsLabel.setText("Instagram  •  YouTube Shorts  •  Facebook");
+        appsLabel.setTextSize(14);
+        appsLabel.setTextColor(Color.parseColor("#E2E8F0"));
+        appsLabel.setPadding(0, 10, 0, 40);
+        card.addView(appsLabel);
+
+        TextView info = new TextView(this);
+        info.setText("Enable the engine service once. Videos will automatically glide to the next one smoothly.");
+        info.setTextSize(13);
+        info.setTextColor(Color.parseColor("#94A3B8"));
+        info.setLineSpacing(1.2f, 1.2f);
+        info.setPadding(0, 0, 0, 40);
+        card.addView(info);
+
+        // Single Master Button
+        Button activateBtn = new Button(this);
+        activateBtn.setText("ACTIVATE SERVICE");
+        activateBtn.setTextSize(15);
+        activateBtn.setTextColor(Color.parseColor("#0F172A"));
+        activateBtn.setTypeface(Typeface.DEFAULT_BOLD);
+
+        GradientDrawable btnBg = new GradientDrawable();
+        btnBg.setColor(Color.parseColor("#38BDF8"));
+        btnBg.setCornerRadius(20);
+        activateBtn.setBackground(btnBg);
+        activateBtn.setPadding(30, 35, 30, 35);
+
+        activateBtn.setOnClickListener(v -> {
             Intent intent = new Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS);
             startActivity(intent);
         });
-        layout.addView(accessBtn);
 
-        setContentView(layout);
+        card.addView(activateBtn);
+        root.addView(card);
+
+        setContentView(root);
     }
 }
