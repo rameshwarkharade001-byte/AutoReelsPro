@@ -29,7 +29,7 @@ public class AutoScrollService extends AccessibilityService {
     private View floatingView;
     private boolean isPlaying = false;
     private int reelsCount = 0;
-    private final long scrollInterval = 14000; // 14-sec balanced video duration
+    private final long scrollInterval = 14000;
     private final Handler handler = new Handler(Looper.getMainLooper());
     private TextView counterText;
     private Button toggleBtn;
@@ -85,7 +85,6 @@ public class AutoScrollService extends AccessibilityService {
         bg.setStroke(2, Color.parseColor("#38BDF8"));
         layout.setBackground(bg);
 
-        // Counter Text
         counterText = new TextView(this);
         counterText.setText("0 Reels");
         counterText.setTextColor(Color.parseColor("#38BDF8"));
@@ -94,7 +93,6 @@ public class AutoScrollService extends AccessibilityService {
         counterText.setPadding(10, 0, 15, 0);
         layout.addView(counterText);
 
-        // Play / Pause Button
         toggleBtn = new Button(this);
         toggleBtn.setText("▶ Start");
         toggleBtn.setTextSize(12);
@@ -113,7 +111,6 @@ public class AutoScrollService extends AccessibilityService {
         });
         layout.addView(toggleBtn);
 
-        // Next Button
         Button nextBtn = new Button(this);
         nextBtn.setText("⏭ Next");
         nextBtn.setTextSize(12);
@@ -126,7 +123,6 @@ public class AutoScrollService extends AccessibilityService {
         });
         layout.addView(nextBtn);
 
-        // Smooth Drag Listener
         layout.setOnTouchListener(new View.OnTouchListener() {
             private int initX, initY;
             private float touchX, touchY;
