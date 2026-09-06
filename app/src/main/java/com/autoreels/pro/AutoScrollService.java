@@ -4,131 +4,198 @@ import android.accessibilityservice.AccessibilityService;
 import android.accessibilityservice.GestureDescription;
 import android.content.Context;
 import android.content.SharedPreferences;
+import android.graphics.Color;
 import android.graphics.Path;
+import android.graphics.PixelFormat;
+import android.graphics.Typeface;
+import android.graphics.drawable.GradientDrawable;
+import android.os.Build;
 import android.os.Handler;
 import android.os.Looper;
+import android.provider.Settings;
 import android.util.DisplayMetrics;
+import android.view.Gravity;
+import android.view.MotionEvent;
+import android.view.View;
+import android.view.WindowManager;
 import android.view.accessibility.AccessibilityEvent;
-import android.view.accessibility.AccessibilityNodeInfo;
+import android.widget.Button;
+import android.widget.LinearLayout;
+import android.widget.TextView;
 
 public class AutoScrollService extends AccessibilityService {
 
+    private WindowManager windowManager;
+    private View floatingView;
+    private boolean isPlaying = false;
+    private int reelsCount = 0;
+    private final long scrollInterval = 14000; // 14-sec balanced video duration
     private final Handler handler = new Handler(Looper.getMainLooper());
-    private boolean isInsideTargetApp = false;
-    private long currentVideoDuration = 15000; // Average video completion window (15s)
-    private long sessionStartTime = 0;
+    private TextView counterText;
+    private Button toggleBtn;
 
     private final Runnable scrollRunnable = new Runnable() {
         @Override
         public void run() {
-            if (isInsideTargetApp) {
+            if (isPlaying) {
                 performSwipeUp();
-                recordReelWatched();
-                // Check next video timing cycle
-                handler.postDelayed(this, currentVideoDuration);
+                reelsCount++;
+                updateCounter();
+                handler.postDelayed(this, scrollInterval);
             }
         }
     };
 
     @Override
-    public void onAccessibilityEvent(AccessibilityEvent event) {
-        if (event == null || event.getPackageName() == null) return;
-        String currentApp = event.getPackageName().toString().toLowerCase();
-
-        // 1. Strict App Whitelist - Will ONLY execute inside these apps
-        boolean isValidTarget = currentApp.contains("instagram") ||
-                                currentApp.contains("youtube") ||
-                                currentApp.contains("katana") ||
-                                currentApp.contains("facebook");
-
-        if (isValidTarget) {
-            if (!isInsideTargetApp) {
-                isInsideTargetApp = true;
-                sessionStartTime = System.currentTimeMillis();
-                handler.removeCallbacks(scrollRunnable);
-                // Video started, wait for it to finish then scroll
-                handler.postDelayed(scrollRunnable, currentVideoDuration);
-            }
-
-            // Inspect screen nodes for live video progress
-            AccessibilityNodeInfo rootNode = getRootInActiveWindow();
-            if (rootNode != null) {
-                inspectProgressNodes(rootNode);
-                rootNode.recycle();
-            }
-
-        } else {
-            // Immediately stop if user leaves target apps (WhatsApp, Home screen, Settings, etc.)
-            if (isInsideTargetApp) {
-                isInsideTargetApp = false;
-                handler.removeCallbacks(scrollRunnable);
-                recordTimeSpent();
-            }
+    public void onServiceConnected() {
+        super.onServiceConnected();
+        windowManager = (WindowManager) getSystemService(WINDOW_SERVICE);
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.M || Settings.canDrawOverlays(this)) {
+            initFloatingWidget();
         }
     }
 
-    private void inspectProgressNodes(AccessibilityNodeInfo node) {
-        if (node == null) return;
-        // Detect progress bars or video seek changes
-        CharSequence desc = node.getContentDescription();
-        if (desc != null) {
-            String descStr = desc.toString().toLowerCase();
-            if (descStr.contains("seek") || descStr.contains("progress") || descStr.contains("video time")) {
-                // Adaptive detection confirmed
+    private void initFloatingWidget() {
+        if (floatingView != null) return;
+
+        int layoutFlag = (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) ?
+                WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY :
+                WindowManager.LayoutParams.TYPE_PHONE;
+
+        final WindowManager.LayoutParams params = new WindowManager.LayoutParams(
+                WindowManager.LayoutParams.WRAP_CONTENT,
+                WindowManager.LayoutParams.WRAP_CONTENT,
+                layoutFlag,
+                WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE,
+                PixelFormat.TRANSLUCENT
+        );
+
+        params.gravity = Gravity.TOP | Gravity.END;
+        params.x = 20;
+        params.y = 250;
+
+        LinearLayout layout = new LinearLayout(this);
+        layout.setOrientation(LinearLayout.HORIZONTAL);
+        layout.setGravity(Gravity.CENTER_VERTICAL);
+        layout.setPadding(25, 15, 25, 15);
+
+        GradientDrawable bg = new GradientDrawable();
+        bg.setColor(Color.parseColor("#E60F172A"));
+        bg.setCornerRadius(60);
+        bg.setStroke(2, Color.parseColor("#38BDF8"));
+        layout.setBackground(bg);
+
+        // Counter Text
+        counterText = new TextView(this);
+        counterText.setText("0 Reels");
+        counterText.setTextColor(Color.parseColor("#38BDF8"));
+        counterText.setTextSize(12);
+        counterText.setTypeface(Typeface.DEFAULT_BOLD);
+        counterText.setPadding(10, 0, 15, 0);
+        layout.addView(counterText);
+
+        // Play / Pause Button
+        toggleBtn = new Button(this);
+        toggleBtn.setText("▶ Start");
+        toggleBtn.setTextSize(12);
+        toggleBtn.setTextColor(Color.WHITE);
+        toggleBtn.setBackgroundColor(Color.TRANSPARENT);
+        toggleBtn.setOnClickListener(v -> {
+            isPlaying = !isPlaying;
+            if (isPlaying) {
+                toggleBtn.setText("⏸ Stop");
+                handler.removeCallbacks(scrollRunnable);
+                handler.postDelayed(scrollRunnable, scrollInterval);
+            } else {
+                toggleBtn.setText("▶ Start");
+                handler.removeCallbacks(scrollRunnable);
             }
+        });
+        layout.addView(toggleBtn);
+
+        // Next Button
+        Button nextBtn = new Button(this);
+        nextBtn.setText("⏭ Next");
+        nextBtn.setTextSize(12);
+        nextBtn.setTextColor(Color.parseColor("#94A3B8"));
+        nextBtn.setBackgroundColor(Color.TRANSPARENT);
+        nextBtn.setOnClickListener(v -> {
+            performSwipeUp();
+            reelsCount++;
+            updateCounter();
+        });
+        layout.addView(nextBtn);
+
+        // Smooth Drag Listener
+        layout.setOnTouchListener(new View.OnTouchListener() {
+            private int initX, initY;
+            private float touchX, touchY;
+
+            @Override
+            public boolean onTouch(View v, MotionEvent event) {
+                switch (event.getAction()) {
+                    case MotionEvent.ACTION_DOWN:
+                        initX = params.x;
+                        initY = params.y;
+                        touchX = event.getRawX();
+                        touchY = event.getRawY();
+                        return false;
+                    case MotionEvent.ACTION_MOVE:
+                        params.x = initX - (int) (event.getRawX() - touchX);
+                        params.y = initY + (int) (event.getRawY() - touchY);
+                        if (floatingView != null && windowManager != null) {
+                            windowManager.updateViewLayout(floatingView, params);
+                        }
+                        return true;
+                }
+                return false;
+            }
+        });
+
+        floatingView = layout;
+        try {
+            windowManager.addView(floatingView, params);
+        } catch (Exception ignored) {}
+    }
+
+    private void updateCounter() {
+        if (counterText != null) {
+            counterText.setText(reelsCount + " Reels");
         }
-        for (int i = 0; i < node.getChildCount(); i++) {
-            inspectProgressNodes(node.getChild(i));
-        }
+        SharedPreferences sp = getSharedPreferences("FlowData", Context.MODE_PRIVATE);
+        int total = sp.getInt("reels_count", 0) + 1;
+        sp.edit().putInt("reels_count", total).apply();
     }
 
     private void performSwipeUp() {
-        DisplayMetrics metrics = getResources().getDisplayMetrics();
-        int width = metrics.widthPixels;
-        int height = metrics.heightPixels;
-
-        float startX = width / 2.0f;
-        float startY = height * 0.78f;
-        float endX = width / 2.0f;
-        float endY = height * 0.22f;
-
-        Path swipePath = new Path();
-        swipePath.moveTo(startX, startY);
-        swipePath.lineTo(endX, endY);
+        DisplayMetrics dm = getResources().getDisplayMetrics();
+        Path path = new Path();
+        path.moveTo(dm.widthPixels / 2.0f, dm.heightPixels * 0.80f);
+        path.lineTo(dm.widthPixels / 2.0f, dm.heightPixels * 0.20f);
 
         GestureDescription.Builder builder = new GestureDescription.Builder();
-        builder.addStroke(new GestureDescription.StrokeDescription(swipePath, 0, 220));
+        builder.addStroke(new GestureDescription.StrokeDescription(path, 0, 240));
         dispatchGesture(builder.build(), null, null);
     }
 
-    private void recordReelWatched() {
-        SharedPreferences sp = getSharedPreferences("FlowReelsData", Context.MODE_PRIVATE);
-        int count = sp.getInt("reel_count", 0) + 1;
-        sp.edit().putInt("reel_count", count).apply();
-    }
-
-    private void recordTimeSpent() {
-        if (sessionStartTime > 0) {
-            long durationSecs = (System.currentTimeMillis() - sessionStartTime) / 1000;
-            SharedPreferences sp = getSharedPreferences("FlowReelsData", Context.MODE_PRIVATE);
-            long total = sp.getLong("total_time_sec", 0) + durationSecs;
-            sp.edit().putLong("total_time_sec", total).apply();
-            sessionStartTime = 0;
-        }
-    }
+    @Override
+    public void onAccessibilityEvent(AccessibilityEvent event) {}
 
     @Override
     public void onInterrupt() {
-        isInsideTargetApp = false;
+        isPlaying = false;
         handler.removeCallbacks(scrollRunnable);
-        recordTimeSpent();
     }
 
     @Override
     public void onDestroy() {
         super.onDestroy();
-        isInsideTargetApp = false;
+        isPlaying = false;
         handler.removeCallbacks(scrollRunnable);
-        recordTimeSpent();
+        if (floatingView != null && windowManager != null) {
+            try {
+                windowManager.removeView(floatingView);
+            } catch (Exception ignored) {}
+        }
     }
 }
