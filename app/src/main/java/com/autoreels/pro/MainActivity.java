@@ -11,7 +11,6 @@ import android.net.Uri;
 import android.os.Build;
 import android.os.Bundle;
 import android.provider.Settings;
-import android.view.Gravity;
 import android.widget.Button;
 import android.widget.LinearLayout;
 import android.widget.TextView;
@@ -30,7 +29,6 @@ public class MainActivity extends Activity {
         root.setPadding(50, 80, 50, 50);
         root.setBackgroundColor(Color.parseColor("#0F172A"));
 
-        // Header Title
         TextView title = new TextView(this);
         title.setText("FlowReels Studio");
         title.setTextSize(26);
@@ -45,7 +43,6 @@ public class MainActivity extends Activity {
         sub.setPadding(0, 8, 0, 40);
         root.addView(sub);
 
-        // Stats Card
         LinearLayout card = new LinearLayout(this);
         card.setOrientation(LinearLayout.VERTICAL);
         card.setPadding(40, 40, 40, 40);
@@ -67,7 +64,6 @@ public class MainActivity extends Activity {
         card.addView(totalCountView);
         root.addView(card);
 
-        // Step 1: Overlay Permission Button
         Button btnOverlay = createStyledButton("1. ALLOW FLOATING CONTROLLER", "#334155", Color.WHITE);
         btnOverlay.setOnClickListener(v -> {
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
@@ -82,7 +78,6 @@ public class MainActivity extends Activity {
         });
         root.addView(btnOverlay);
 
-        // Step 2: Accessibility Permission Button
         Button btnAccess = createStyledButton("2. START AUTO ENGINE", "#38BDF8", Color.parseColor("#0F172A"));
         btnAccess.setOnClickListener(v -> {
             Intent intent = new Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS);
