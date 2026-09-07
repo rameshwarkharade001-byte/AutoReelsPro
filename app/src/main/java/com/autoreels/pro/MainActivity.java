@@ -2,8 +2,11 @@ package com.autoreels.pro;
 
 import android.app.Activity;
 import android.app.AlertDialog;
+import android.app.DownloadManager;
+import android.content.BroadcastReceiver;
 import android.content.Context;
 import android.content.Intent;
+import android.content.IntentFilter;
 import android.content.SharedPreferences;
 import android.graphics.Color;
 import android.graphics.Typeface;
@@ -11,6 +14,7 @@ import android.graphics.drawable.GradientDrawable;
 import android.net.Uri;
 import android.os.Build;
 import android.os.Bundle;
+import android.os.Environment;
 import android.provider.Settings;
 import android.view.Gravity;
 import android.widget.CheckBox;
@@ -21,7 +25,22 @@ import android.widget.Switch;
 import android.widget.TextView;
 import android.widget.Toast;
 
+import androidx.core.content.FileProvider;
+
+import org.json.JSONObject;
+
+import java.io.BufferedReader;
+import java.io.File;
+import java.io.InputStreamReader;
+import java.net.HttpURLConnection;
+import java.net.URL;
+
 public class MainActivity extends Activity {
+
+    // सध्याचे चालू असलेले व्हर्जन
+    private static final int CURRENT_VERSION_CODE = 1;
+    // तुझ्या GitHub रिपॉझिटरीचे नाव
+    private static final String GITHUB_USER_REPO = "rameshwarthorade001-byte/AutoReelsPro";
 
     private Switch autoSwitch;
     private Switch globalSwitch;
@@ -39,7 +58,7 @@ public class MainActivity extends Activity {
         root.setOrientation(LinearLayout.VERTICAL);
         scrollView.addView(root);
 
-        // Gradient Top Bar
+        // Header
         LinearLayout topBar = new LinearLayout(this);
         topBar.setOrientation(LinearLayout.VERTICAL);
         topBar.setPadding(40, 50, 40, 40);
@@ -87,7 +106,7 @@ public class MainActivity extends Activity {
         card2.addView(row2);
         body.addView(card2);
 
-        // Action Buttons (Apps, Theme, Settings)
+        // Action Buttons
         LinearLayout btnRow = new LinearLayout(this);
         btnRow.setOrientation(LinearLayout.HORIZONTAL);
         btnRow.setWeightSum(3.0f);
@@ -96,12 +115,15 @@ public class MainActivity extends Activity {
         btnLp.setMargins(0, 20, 0, 20);
         btnRow.setLayoutParams(btnLp);
 
-        btnRow.addView(buildMenuBtn("APPS", () -> showAppsDialog()));
-        btnRow.addView(buildMenuBtn("THEME", () -> showThemeDialog()));
-        btnRow.addView(buildMenuBtn("SETTINGS", () -> showSettingsDialog()));
+        btnRow.addView(buildMenuBtn("APPS", this::showAppsDialog));
+        btnRow.addView(buildMenuBtn("THEME", this::showThemeDialog));
+        btnRow.addView(buildMenuBtn("SETTINGS", this::showSettingsDialog));
         body.addView(btnRow);
 
         setContentView(scrollView);
+
+        // ॲप चालू होताच बॅकग्राउंडला ऑटो-अपडेट चेक करणे
+        checkForAppUpdate();
     }
 
     private LinearLayout buildCard() {
@@ -170,6 +192,84 @@ public class MainActivity extends Activity {
         return box;
     }
 
+    // --- इन-ॲप ऑटो अपडेटर लॉजिक ---
+    private void checkForAppUpdate() {
+        new Thread(() -> {
+            try {
+                // GitHub Releases API वरून लेटेस्ट व्हर्जन चेक करणे
+                URL url = new URL("https://api.github.com/repos/" + GITHUB_USER_REPO + "/releases/latest");
+                HttpURLConnection conn = (HttpURLConnection) url.openConnection();
+                conn.setRequestMethod("GET");
+                conn.setRequestProperty("User-Agent", "AutoScrollApp");
+
+                if (conn.getResponseCode() == 200) {
+                    BufferedReader reader = new BufferedReader(new InputStreamReader(conn.getInputStream()));
+                    StringBuilder sb = new StringBuilder();
+                    String line;
+                    while ((line = reader.readLine()) != null) {
+                        sb.append(line);
+                    }
+                    reader.close();
+
+                    JSONObject json = new JSONObject(sb.toString());
+                    String tagName = json.optString("tag_name", "v1.0");
+                    // tag_name मधून व्हर्जन नंबर काढणे (उदा. v2.0 -> 2)
+                    int latestVer = Integer.parseInt(tagName.replaceAll("[^0-9]", ""));
+
+                    if (latestVer > CURRENT_VERSION_CODE) {
+                        String downloadUrl = json.getJSONArray("assets").getJSONObject(0).getString("browser_download_url");
+                        runOnUiThread(() -> showUpdateDialog(downloadUrl, tagName));
+                    }
+                }
+            } catch (Exception ignored) {}
+        }).start();
+    }
+
+    private void showUpdateDialog(String downloadUrl, String newVersion) {
+        new AlertDialog.Builder(this)
+                .setTitle("🚀 नवीन अपडेट उपलब्ध आहे (" + newVersion + ")")
+                .setMessage("ॲपमध्ये नवीन फीचर्स आणि सुधारणा आल्या आहेत. कृपया अपडेट करा.")
+                .setCancelable(false)
+                .setPositiveButton("Update Now", (d, w) -> startDownloadAndInstall(downloadUrl))
+                .setNegativeButton("Later", null)
+                .show();
+    }
+
+    private void startDownloadAndInstall(String downloadUrl) {
+        Toast.makeText(this, "अपडेट डाऊनलोड होत आहे...", Toast.LENGTH_SHORT).show();
+
+        DownloadManager.Request request = new DownloadManager.Request(Uri.parse(downloadUrl));
+        request.setTitle("Auto Scroll Update");
+        request.setDescription("Downloading latest version...");
+        request.setNotificationVisibility(DownloadManager.Request.VISIBILITY_VISIBLE_NOTIFY_COMPLETED);
+        request.setDestinationInExternalFilesDir(this, Environment.DIRECTORY_DOWNLOADS, "update.apk");
+
+        DownloadManager dm = (DownloadManager) getSystemService(Context.DOWNLOAD_SERVICE);
+        long downloadId = dm.enqueue(request);
+
+        registerReceiver(new BroadcastReceiver() {
+            @Override
+            public void onReceive(Context context, Intent intent) {
+                long id = intent.getLongExtra(DownloadManager.EXTRA_DOWNLOAD_ID, -1);
+                if (id == downloadId) {
+                    File file = new File(getExternalFilesDir(Environment.DIRECTORY_DOWNLOADS), "update.apk");
+                    installApk(file);
+                }
+            }
+        }, new IntentFilter(DownloadManager.ACTION_DOWNLOAD_COMPLETE));
+    }
+
+    private void installApk(File file) {
+        if (!file.exists()) return;
+
+        Uri apkUri = FileProvider.getUriForFile(this, getPackageName() + ".provider", file);
+        Intent intent = new Intent(Intent.ACTION_VIEW);
+        intent.setDataAndType(apkUri, "application/vnd.android.package-archive");
+        intent.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
+        intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+        startActivity(intent);
+    }
+
     private void showSettingsDialog() {
         AlertDialog.Builder b = new AlertDialog.Builder(this);
         b.setTitle("Scrolling Settings");
@@ -178,7 +278,6 @@ public class MainActivity extends Activity {
         layout.setOrientation(LinearLayout.VERTICAL);
         layout.setPadding(40, 20, 40, 20);
 
-        // Delay / Reel Timeout
         int currentDelay = prefs.getInt("jump_delay", 14);
         TextView delayLabel = new TextView(this);
         delayLabel.setText("Jump Pages Delay: " + currentDelay + "s");
@@ -199,7 +298,6 @@ public class MainActivity extends Activity {
         });
         layout.addView(delayBar);
 
-        // Invert Scroll
         CheckBox invertCb = new CheckBox(this);
         invertCb.setText("Invert Scrolling Direction");
         invertCb.setChecked(prefs.getBoolean("invert_scroll", false));
@@ -221,7 +319,7 @@ public class MainActivity extends Activity {
             if (which == 2) hex = "#E6E67E22";
             if (which == 3) hex = "#E62C3E50";
             prefs.edit().putString("widget_color", hex).apply();
-            Toast.makeText(this, "Theme Applied! Re-open floating bar to refresh.", Toast.LENGTH_SHORT).show();
+            Toast.makeText(this, "Theme Saved!", Toast.LENGTH_SHORT).show();
         });
         b.show();
     }
@@ -247,4 +345,5 @@ public class MainActivity extends Activity {
         Intent intent = new Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS);
         startActivity(intent);
     }
-}
+                                  }
+                   
