@@ -32,14 +32,15 @@ public class AutoScrollService extends AccessibilityService {
     private final Handler handler = new Handler(Looper.getMainLooper());
     private Button continuousBtn;
 
+    // Continuous auto scroll loop
     private final Runnable loopScroll = new Runnable() {
         @Override
         public void run() {
             if (isContinuousScrolling) {
-                SharedPreferences sp = getSharedPreferences("ScrollPrefs", Context.MODE_PRIVATE);
-                boolean invert = sp.getBoolean("invert_scroll", false);
-                performScrollGesture(!invert, 220); // Swipe next
+                // पुढची रील आणण्यासाठी खालून वर स्वाइप (Next Reel)
+                performNextReelSwipe(220);
                 
+                SharedPreferences sp = getSharedPreferences("ScrollPrefs", Context.MODE_PRIVATE);
                 int delaySecs = sp.getInt("jump_delay", 14);
                 handler.postDelayed(this, delaySecs * 1000L);
             }
@@ -97,13 +98,10 @@ public class AutoScrollService extends AccessibilityService {
         drag.setPadding(0, 2, 0, 8);
         bar.addView(drag);
 
-        // 2. Fast Jump Up (⏫)
-        bar.addView(makeIconButton("⏫", v -> performScrollGesture(false, 150)));
+        // 2. Previous Reel (मागची रील - वरून खाली ओढणे)
+        bar.addView(makeIconButton("▲", v -> performPreviousReelSwipe(200)));
 
-        // 3. Slow Scroll Up (▲)
-        bar.addView(makeIconButton("▲", v -> performScrollGesture(false, 350)));
-
-        // 4. Continuous Auto-Scroll Toggle (▶ / ⏸)
+        // 3. Continuous Auto-Scroll Toggle (▶ / ⏸)
         continuousBtn = makeIconButton("▶", v -> {
             isContinuousScrolling = !isContinuousScrolling;
             if (isContinuousScrolling) {
@@ -117,20 +115,17 @@ public class AutoScrollService extends AccessibilityService {
         });
         bar.addView(continuousBtn);
 
-        // 5. Slow Scroll Down (▼)
-        bar.addView(makeIconButton("▼", v -> performScrollGesture(true, 350)));
+        // 4. Next Reel Button (पुढची रील - खालून वर ढकलणे)
+        bar.addView(makeIconButton("▼", v -> performNextReelSwipe(200)));
 
-        // 6. Fast Jump Down / Next Reel (⏬)
-        bar.addView(makeIconButton("⏬", v -> performScrollGesture(true, 150)));
-
-        // 7. Settings Shortcut (⚙)
+        // 5. Settings Shortcut (⚙)
         bar.addView(makeIconButton("⚙", v -> {
             Intent intent = new Intent(this, MainActivity.class);
             intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
             startActivity(intent);
         }));
 
-        // 8. Collapse / Hide (✕)
+        // 6. Close / Hide (✕)
         bar.addView(makeIconButton("✕", v -> {
             isContinuousScrolling = false;
             handler.removeCallbacks(loopScroll);
@@ -182,12 +177,30 @@ public class AutoScrollService extends AccessibilityService {
         return b;
     }
 
-    private void performScrollGesture(boolean scrollDown, int durationMs) {
+    // पुढची रील (Next Reel) : खालून (80%) वर (20%) सरकवणे
+    private void performNextReelSwipe(int durationMs) {
         DisplayMetrics dm = getResources().getDisplayMetrics();
         Path path = new Path();
 
-        float startY = scrollDown ? dm.heightPixels * 0.80f : dm.heightPixels * 0.22f;
-        float endY = scrollDown ? dm.heightPixels * 0.20f : dm.heightPixels * 0.78f;
+        float startY = dm.heightPixels * 0.80f; // खालून सुरू
+        float endY = dm.heightPixels * 0.20f;   // वर नेऊन सोडणे
+        float x = dm.widthPixels / 2.0f;
+
+        path.moveTo(x, startY);
+        path.lineTo(x, endY);
+
+        GestureDescription.Builder builder = new GestureDescription.Builder();
+        builder.addStroke(new GestureDescription.StrokeDescription(path, 0, durationMs));
+        dispatchGesture(builder.build(), null, null);
+    }
+
+    // मागची रील (Previous Reel) : वरून (25%) खाली (75%) आणणे
+    private void performPreviousReelSwipe(int durationMs) {
+        DisplayMetrics dm = getResources().getDisplayMetrics();
+        Path path = new Path();
+
+        float startY = dm.heightPixels * 0.25f; // वरून सुरू
+        float endY = dm.heightPixels * 0.75f;   // खाली ओढणे
         float x = dm.widthPixels / 2.0f;
 
         path.moveTo(x, startY);
@@ -209,7 +222,7 @@ public class AutoScrollService extends AccessibilityService {
         if (isGlobal) {
             if (floatingSidebar != null) floatingSidebar.setVisibility(View.VISIBLE);
         } else {
-            // Strict App Matching (Instagram, Shorts, Facebook)
+            // फक्त Instagram, YouTube, Facebook उघडल्यावरच बार दिसेल
             boolean match = pkg.contains("instagram") || pkg.contains("youtube") || pkg.contains("katana") || pkg.contains("facebook");
             if (floatingSidebar != null) {
                 floatingSidebar.setVisibility(match ? View.VISIBLE : View.GONE);
