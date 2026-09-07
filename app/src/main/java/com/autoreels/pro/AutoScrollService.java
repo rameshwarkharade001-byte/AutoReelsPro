@@ -3,6 +3,7 @@ package com.autoreels.pro;
 import android.accessibilityservice.AccessibilityService;
 import android.accessibilityservice.GestureDescription;
 import android.content.Context;
+import android.content.Intent;
 import android.content.SharedPreferences;
 import android.graphics.Color;
 import android.graphics.Path;
@@ -26,22 +27,21 @@ import android.widget.TextView;
 public class AutoScrollService extends AccessibilityService {
 
     private WindowManager windowManager;
-    private View floatingView;
-    private boolean isPlaying = false;
-    private int reelsCount = 0;
-    private final long scrollInterval = 14000;
+    private View floatingSidebar;
+    private boolean isContinuousScrolling = false;
     private final Handler handler = new Handler(Looper.getMainLooper());
-    private TextView counterText;
-    private Button toggleBtn;
+    private Button continuousBtn;
 
-    private final Runnable scrollRunnable = new Runnable() {
+    private final Runnable loopScroll = new Runnable() {
         @Override
         public void run() {
-            if (isPlaying) {
-                performSwipeUp();
-                reelsCount++;
-                updateCounter();
-                handler.postDelayed(this, scrollInterval);
+            if (isContinuousScrolling) {
+                SharedPreferences sp = getSharedPreferences("ScrollPrefs", Context.MODE_PRIVATE);
+                boolean invert = sp.getBoolean("invert_scroll", false);
+                performScrollGesture(!invert, 220); // Swipe next
+                
+                int delaySecs = sp.getInt("jump_delay", 14);
+                handler.postDelayed(this, delaySecs * 1000L);
             }
         }
     };
@@ -51,12 +51,12 @@ public class AutoScrollService extends AccessibilityService {
         super.onServiceConnected();
         windowManager = (WindowManager) getSystemService(WINDOW_SERVICE);
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.M || Settings.canDrawOverlays(this)) {
-            initFloatingWidget();
+            buildFullFloatingSidebar();
         }
     }
 
-    private void initFloatingWidget() {
-        if (floatingView != null) return;
+    private void buildFullFloatingSidebar() {
+        if (floatingSidebar != null) return;
 
         int layoutFlag = (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) ?
                 WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY :
@@ -70,60 +70,75 @@ public class AutoScrollService extends AccessibilityService {
                 PixelFormat.TRANSLUCENT
         );
 
-        params.gravity = Gravity.TOP | Gravity.END;
-        params.x = 20;
-        params.y = 250;
+        params.gravity = Gravity.TOP | Gravity.START;
+        params.x = 0;
+        params.y = 300;
 
-        LinearLayout layout = new LinearLayout(this);
-        layout.setOrientation(LinearLayout.HORIZONTAL);
-        layout.setGravity(Gravity.CENTER_VERTICAL);
-        layout.setPadding(25, 15, 25, 15);
+        LinearLayout bar = new LinearLayout(this);
+        bar.setOrientation(LinearLayout.VERTICAL);
+        bar.setGravity(Gravity.CENTER_HORIZONTAL);
+        bar.setPadding(8, 14, 8, 14);
+
+        SharedPreferences sp = getSharedPreferences("ScrollPrefs", Context.MODE_PRIVATE);
+        String colorHex = sp.getString("widget_color", "#E620B2AA");
 
         GradientDrawable bg = new GradientDrawable();
-        bg.setColor(Color.parseColor("#E60F172A"));
-        bg.setCornerRadius(60);
-        bg.setStroke(2, Color.parseColor("#38BDF8"));
-        layout.setBackground(bg);
+        bg.setColor(Color.parseColor(colorHex));
+        bg.setCornerRadius(35);
+        bg.setStroke(2, Color.parseColor("#FFFFFF"));
+        bar.setBackground(bg);
 
-        counterText = new TextView(this);
-        counterText.setText("0 Reels");
-        counterText.setTextColor(Color.parseColor("#38BDF8"));
-        counterText.setTextSize(12);
-        counterText.setTypeface(Typeface.DEFAULT_BOLD);
-        counterText.setPadding(10, 0, 15, 0);
-        layout.addView(counterText);
+        // 1. Drag Bar Handle (↔)
+        TextView drag = new TextView(this);
+        drag.setText("↔");
+        drag.setTextColor(Color.WHITE);
+        drag.setTextSize(14);
+        drag.setGravity(Gravity.CENTER);
+        drag.setPadding(0, 2, 0, 8);
+        bar.addView(drag);
 
-        toggleBtn = new Button(this);
-        toggleBtn.setText("▶ Start");
-        toggleBtn.setTextSize(12);
-        toggleBtn.setTextColor(Color.WHITE);
-        toggleBtn.setBackgroundColor(Color.TRANSPARENT);
-        toggleBtn.setOnClickListener(v -> {
-            isPlaying = !isPlaying;
-            if (isPlaying) {
-                toggleBtn.setText("⏸ Stop");
-                handler.removeCallbacks(scrollRunnable);
-                handler.postDelayed(scrollRunnable, scrollInterval);
+        // 2. Fast Jump Up (⏫)
+        bar.addView(makeIconButton("⏫", v -> performScrollGesture(false, 150)));
+
+        // 3. Slow Scroll Up (▲)
+        bar.addView(makeIconButton("▲", v -> performScrollGesture(false, 350)));
+
+        // 4. Continuous Auto-Scroll Toggle (▶ / ⏸)
+        continuousBtn = makeIconButton("▶", v -> {
+            isContinuousScrolling = !isContinuousScrolling;
+            if (isContinuousScrolling) {
+                continuousBtn.setText("⏸");
+                handler.removeCallbacks(loopScroll);
+                handler.post(loopScroll);
             } else {
-                toggleBtn.setText("▶ Start");
-                handler.removeCallbacks(scrollRunnable);
+                continuousBtn.setText("▶");
+                handler.removeCallbacks(loopScroll);
             }
         });
-        layout.addView(toggleBtn);
+        bar.addView(continuousBtn);
 
-        Button nextBtn = new Button(this);
-        nextBtn.setText("⏭ Next");
-        nextBtn.setTextSize(12);
-        nextBtn.setTextColor(Color.parseColor("#94A3B8"));
-        nextBtn.setBackgroundColor(Color.TRANSPARENT);
-        nextBtn.setOnClickListener(v -> {
-            performSwipeUp();
-            reelsCount++;
-            updateCounter();
-        });
-        layout.addView(nextBtn);
+        // 5. Slow Scroll Down (▼)
+        bar.addView(makeIconButton("▼", v -> performScrollGesture(true, 350)));
 
-        layout.setOnTouchListener(new View.OnTouchListener() {
+        // 6. Fast Jump Down / Next Reel (⏬)
+        bar.addView(makeIconButton("⏬", v -> performScrollGesture(true, 150)));
+
+        // 7. Settings Shortcut (⚙)
+        bar.addView(makeIconButton("⚙", v -> {
+            Intent intent = new Intent(this, MainActivity.class);
+            intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+            startActivity(intent);
+        }));
+
+        // 8. Collapse / Hide (✕)
+        bar.addView(makeIconButton("✕", v -> {
+            isContinuousScrolling = false;
+            handler.removeCallbacks(loopScroll);
+            bar.setVisibility(View.GONE);
+        }));
+
+        // Touch Dragging
+        bar.setOnTouchListener(new View.OnTouchListener() {
             private int initX, initY;
             private float touchX, touchY;
 
@@ -137,10 +152,10 @@ public class AutoScrollService extends AccessibilityService {
                         touchY = event.getRawY();
                         return false;
                     case MotionEvent.ACTION_MOVE:
-                        params.x = initX - (int) (event.getRawX() - touchX);
+                        params.x = initX + (int) (event.getRawX() - touchX);
                         params.y = initY + (int) (event.getRawY() - touchY);
-                        if (floatingView != null && windowManager != null) {
-                            windowManager.updateViewLayout(floatingView, params);
+                        if (floatingSidebar != null && windowManager != null) {
+                            windowManager.updateViewLayout(floatingSidebar, params);
                         }
                         return true;
                 }
@@ -148,50 +163,80 @@ public class AutoScrollService extends AccessibilityService {
             }
         });
 
-        floatingView = layout;
+        floatingSidebar = bar;
         try {
-            windowManager.addView(floatingView, params);
+            windowManager.addView(floatingSidebar, params);
         } catch (Exception ignored) {}
     }
 
-    private void updateCounter() {
-        if (counterText != null) {
-            counterText.setText(reelsCount + " Reels");
-        }
-        SharedPreferences sp = getSharedPreferences("FlowData", Context.MODE_PRIVATE);
-        int total = sp.getInt("reels_count", 0) + 1;
-        sp.edit().putInt("reels_count", total).apply();
+    private Button makeIconButton(String label, View.OnClickListener listener) {
+        Button b = new Button(this);
+        b.setText(label);
+        b.setTextColor(Color.WHITE);
+        b.setTextSize(13);
+        b.setTypeface(Typeface.DEFAULT_BOLD);
+        b.setBackgroundColor(Color.TRANSPARENT);
+        b.setPadding(0, 6, 0, 6);
+        b.setLayoutParams(new LinearLayout.LayoutParams(90, 85));
+        b.setOnClickListener(listener);
+        return b;
     }
 
-    private void performSwipeUp() {
+    private void performScrollGesture(boolean scrollDown, int durationMs) {
         DisplayMetrics dm = getResources().getDisplayMetrics();
         Path path = new Path();
-        path.moveTo(dm.widthPixels / 2.0f, dm.heightPixels * 0.80f);
-        path.lineTo(dm.widthPixels / 2.0f, dm.heightPixels * 0.20f);
+
+        float startY = scrollDown ? dm.heightPixels * 0.80f : dm.heightPixels * 0.22f;
+        float endY = scrollDown ? dm.heightPixels * 0.20f : dm.heightPixels * 0.78f;
+        float x = dm.widthPixels / 2.0f;
+
+        path.moveTo(x, startY);
+        path.lineTo(x, endY);
 
         GestureDescription.Builder builder = new GestureDescription.Builder();
-        builder.addStroke(new GestureDescription.StrokeDescription(path, 0, 240));
+        builder.addStroke(new GestureDescription.StrokeDescription(path, 0, durationMs));
         dispatchGesture(builder.build(), null, null);
     }
 
     @Override
-    public void onAccessibilityEvent(AccessibilityEvent event) {}
+    public void onAccessibilityEvent(AccessibilityEvent event) {
+        if (event == null || event.getPackageName() == null) return;
+        String pkg = event.getPackageName().toString().toLowerCase();
+
+        SharedPreferences sp = getSharedPreferences("ScrollPrefs", Context.MODE_PRIVATE);
+        boolean isGlobal = sp.getBoolean("global_scroll", false);
+
+        if (isGlobal) {
+            if (floatingSidebar != null) floatingSidebar.setVisibility(View.VISIBLE);
+        } else {
+            // Strict App Matching (Instagram, Shorts, Facebook)
+            boolean match = pkg.contains("instagram") || pkg.contains("youtube") || pkg.contains("katana") || pkg.contains("facebook");
+            if (floatingSidebar != null) {
+                floatingSidebar.setVisibility(match ? View.VISIBLE : View.GONE);
+            }
+            if (!match && isContinuousScrolling) {
+                isContinuousScrolling = false;
+                handler.removeCallbacks(loopScroll);
+                if (continuousBtn != null) continuousBtn.setText("▶");
+            }
+        }
+    }
 
     @Override
     public void onInterrupt() {
-        isPlaying = false;
-        handler.removeCallbacks(scrollRunnable);
+        isContinuousScrolling = false;
+        handler.removeCallbacks(loopScroll);
     }
 
     @Override
     public void onDestroy() {
         super.onDestroy();
-        isPlaying = false;
-        handler.removeCallbacks(scrollRunnable);
-        if (floatingView != null && windowManager != null) {
+        isContinuousScrolling = false;
+        handler.removeCallbacks(loopScroll);
+        if (floatingSidebar != null && windowManager != null) {
             try {
-                windowManager.removeView(floatingView);
+                windowManager.removeView(floatingSidebar);
             } catch (Exception ignored) {}
         }
     }
-}
+            }
