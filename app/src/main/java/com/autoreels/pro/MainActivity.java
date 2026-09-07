@@ -1,6 +1,7 @@
 package com.autoreels.pro;
 
 import android.app.Activity;
+import android.app.AlertDialog;
 import android.content.Context;
 import android.content.Intent;
 import android.content.SharedPreferences;
@@ -11,112 +12,239 @@ import android.net.Uri;
 import android.os.Build;
 import android.os.Bundle;
 import android.provider.Settings;
-import android.widget.Button;
+import android.view.Gravity;
+import android.widget.CheckBox;
 import android.widget.LinearLayout;
+import android.widget.ScrollView;
+import android.widget.SeekBar;
+import android.widget.Switch;
 import android.widget.TextView;
 import android.widget.Toast;
 
 public class MainActivity extends Activity {
 
-    private TextView totalCountView;
+    private Switch autoSwitch;
+    private Switch globalSwitch;
+    private SharedPreferences prefs;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
+        prefs = getSharedPreferences("ScrollPrefs", Context.MODE_PRIVATE);
+
+        ScrollView scrollView = new ScrollView(this);
+        scrollView.setBackgroundColor(Color.parseColor("#0C232E"));
 
         LinearLayout root = new LinearLayout(this);
         root.setOrientation(LinearLayout.VERTICAL);
-        root.setPadding(50, 80, 50, 50);
-        root.setBackgroundColor(Color.parseColor("#0F172A"));
+        scrollView.addView(root);
+
+        // Gradient Top Bar
+        LinearLayout topBar = new LinearLayout(this);
+        topBar.setOrientation(LinearLayout.VERTICAL);
+        topBar.setPadding(40, 50, 40, 40);
+        GradientDrawable grad = new GradientDrawable(
+                GradientDrawable.Orientation.TOP_BOTTOM,
+                new int[]{Color.parseColor("#00A896"), Color.parseColor("#028090")}
+        );
+        topBar.setBackground(grad);
 
         TextView title = new TextView(this);
-        title.setText("FlowReels Studio");
-        title.setTextSize(26);
-        title.setTypeface(Typeface.DEFAULT_BOLD);
+        title.setText("Automatic Scroll");
         title.setTextColor(Color.WHITE);
-        root.addView(title);
+        title.setTextSize(22);
+        title.setTypeface(Typeface.DEFAULT_BOLD);
+        title.setGravity(Gravity.CENTER);
+        topBar.addView(title);
+        root.addView(topBar);
 
-        TextView sub = new TextView(this);
-        sub.setText("Smart Hands-Free Companion");
-        sub.setTextSize(13);
-        sub.setTextColor(Color.parseColor("#94A3B8"));
-        sub.setPadding(0, 8, 0, 40);
-        root.addView(sub);
+        LinearLayout body = new LinearLayout(this);
+        body.setOrientation(LinearLayout.VERTICAL);
+        body.setPadding(35, 30, 35, 30);
+        root.addView(body);
 
+        // 1. Automatic Scroll Card
+        LinearLayout card1 = buildCard();
+        LinearLayout row1 = buildRow("Automatic Scroll", "Turn ON floating navigation service");
+        autoSwitch = new Switch(this);
+        autoSwitch.setOnCheckedChangeListener((v, isChecked) -> {
+            if (isChecked) checkPermissions();
+        });
+        row1.addView(autoSwitch);
+        card1.addView(row1);
+        body.addView(card1);
+
+        // 2. Global Scroll Card
+        LinearLayout card2 = buildCard();
+        LinearLayout row2 = buildRow("Global Scroll", "Enable scrolling on every screen");
+        globalSwitch = new Switch(this);
+        globalSwitch.setChecked(prefs.getBoolean("global_scroll", false));
+        globalSwitch.setOnCheckedChangeListener((v, isChecked) -> {
+            prefs.edit().putBoolean("global_scroll", isChecked).apply();
+            Toast.makeText(this, isChecked ? "Global Scroll Active" : "Selected Apps Only Active", Toast.LENGTH_SHORT).show();
+        });
+        row2.addView(globalSwitch);
+        card2.addView(row2);
+        body.addView(card2);
+
+        // Action Buttons (Apps, Theme, Settings)
+        LinearLayout btnRow = new LinearLayout(this);
+        btnRow.setOrientation(LinearLayout.HORIZONTAL);
+        btnRow.setWeightSum(3.0f);
+        LinearLayout.LayoutParams btnLp = new LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT);
+        btnLp.setMargins(0, 20, 0, 20);
+        btnRow.setLayoutParams(btnLp);
+
+        btnRow.addView(buildMenuBtn("APPS", () -> showAppsDialog()));
+        btnRow.addView(buildMenuBtn("THEME", () -> showThemeDialog()));
+        btnRow.addView(buildMenuBtn("SETTINGS", () -> showSettingsDialog()));
+        body.addView(btnRow);
+
+        setContentView(scrollView);
+    }
+
+    private LinearLayout buildCard() {
         LinearLayout card = new LinearLayout(this);
         card.setOrientation(LinearLayout.VERTICAL);
-        card.setPadding(40, 40, 40, 40);
-        card.setBackground(createCardBackground("#1E293B", 24));
-
-        TextView statLabel = new TextView(this);
-        statLabel.setText("TOTAL REELS TRACKED");
-        statLabel.setTextSize(11);
-        statLabel.setTextColor(Color.parseColor("#38BDF8"));
-        statLabel.setTypeface(Typeface.DEFAULT_BOLD);
-        card.addView(statLabel);
-
-        totalCountView = new TextView(this);
-        totalCountView.setText("0 Reels");
-        totalCountView.setTextSize(32);
-        totalCountView.setTypeface(Typeface.DEFAULT_BOLD);
-        totalCountView.setTextColor(Color.WHITE);
-        totalCountView.setPadding(0, 10, 0, 0);
-        card.addView(totalCountView);
-        root.addView(card);
-
-        Button btnOverlay = createStyledButton("1. ALLOW FLOATING CONTROLLER", "#334155", Color.WHITE);
-        btnOverlay.setOnClickListener(v -> {
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
-                if (!Settings.canDrawOverlays(this)) {
-                    Intent intent = new Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION,
-                            Uri.parse("package:" + getPackageName()));
-                    startActivity(intent);
-                } else {
-                    Toast.makeText(this, "Floating permission already granted", Toast.LENGTH_SHORT).show();
-                }
-            }
-        });
-        root.addView(btnOverlay);
-
-        Button btnAccess = createStyledButton("2. START AUTO ENGINE", "#38BDF8", Color.parseColor("#0F172A"));
-        btnAccess.setOnClickListener(v -> {
-            Intent intent = new Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS);
-            startActivity(intent);
-        });
-        root.addView(btnAccess);
-
-        setContentView(root);
-    }
-
-    private Button createStyledButton(String text, String bgColor, int textColor) {
-        Button b = new Button(this);
-        b.setText(text);
-        b.setTextSize(13);
-        b.setTypeface(Typeface.DEFAULT_BOLD);
-        b.setTextColor(textColor);
-        b.setBackground(createCardBackground(bgColor, 18));
+        card.setPadding(35, 35, 35, 35);
+        GradientDrawable bg = new GradientDrawable();
+        bg.setColor(Color.parseColor("#143642"));
+        bg.setCornerRadius(22);
+        card.setBackground(bg);
         LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(
                 LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT);
-        lp.setMargins(0, 30, 0, 0);
-        b.setLayoutParams(lp);
-        b.setPadding(0, 35, 0, 35);
-        return b;
+        lp.setMargins(0, 0, 0, 25);
+        card.setLayoutParams(lp);
+        return card;
     }
 
-    private GradientDrawable createCardBackground(String hexColor, int radius) {
-        GradientDrawable gd = new GradientDrawable();
-        gd.setColor(Color.parseColor(hexColor));
-        gd.setCornerRadius(radius);
-        return gd;
+    private LinearLayout buildRow(String heading, String sub) {
+        LinearLayout row = new LinearLayout(this);
+        row.setOrientation(LinearLayout.HORIZONTAL);
+        row.setGravity(Gravity.CENTER_VERTICAL);
+
+        LinearLayout textCol = new LinearLayout(this);
+        textCol.setOrientation(LinearLayout.VERTICAL);
+        LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1.0f);
+        textCol.setLayoutParams(lp);
+
+        TextView t = new TextView(this);
+        t.setText(heading);
+        t.setTextSize(16);
+        t.setTextColor(Color.WHITE);
+        t.setTypeface(Typeface.DEFAULT_BOLD);
+        textCol.addView(t);
+
+        TextView s = new TextView(this);
+        s.setText(sub);
+        s.setTextSize(12);
+        s.setTextColor(Color.parseColor("#80CED7"));
+        textCol.addView(s);
+
+        row.addView(textCol);
+        return row;
     }
 
-    @Override
-    protected void onResume() {
-        super.onResume();
-        SharedPreferences sp = getSharedPreferences("FlowData", Context.MODE_PRIVATE);
-        int total = sp.getInt("reels_count", 0);
-        if (totalCountView != null) {
-            totalCountView.setText(total + " Reels");
+    private LinearLayout buildMenuBtn(String label, Runnable onClick) {
+        LinearLayout box = new LinearLayout(this);
+        LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(0, 160, 1.0f);
+        lp.setMargins(8, 0, 8, 0);
+        box.setLayoutParams(lp);
+        box.setOrientation(LinearLayout.VERTICAL);
+        box.setGravity(Gravity.CENTER);
+
+        GradientDrawable bg = new GradientDrawable();
+        bg.setColor(Color.parseColor("#1A4B5C"));
+        bg.setCornerRadius(18);
+        box.setBackground(bg);
+
+        TextView t = new TextView(this);
+        t.setText(label);
+        t.setTextColor(Color.WHITE);
+        t.setTextSize(12);
+        t.setTypeface(Typeface.DEFAULT_BOLD);
+        box.addView(t);
+
+        box.setOnClickListener(v -> onClick.run());
+        return box;
+    }
+
+    private void showSettingsDialog() {
+        AlertDialog.Builder b = new AlertDialog.Builder(this);
+        b.setTitle("Scrolling Settings");
+
+        LinearLayout layout = new LinearLayout(this);
+        layout.setOrientation(LinearLayout.VERTICAL);
+        layout.setPadding(40, 20, 40, 20);
+
+        // Delay / Reel Timeout
+        int currentDelay = prefs.getInt("jump_delay", 14);
+        TextView delayLabel = new TextView(this);
+        delayLabel.setText("Jump Pages Delay: " + currentDelay + "s");
+        layout.addView(delayLabel);
+
+        SeekBar delayBar = new SeekBar(this);
+        delayBar.setMax(30);
+        delayBar.setProgress(currentDelay);
+        delayBar.setOnSeekBarChangeListener(new SeekBar.OnSeekBarChangeListener() {
+            @Override
+            public void onProgressChanged(SeekBar seekBar, int progress, boolean fromUser) {
+                int val = Math.max(progress, 3);
+                delayLabel.setText("Jump Pages Delay: " + val + "s");
+                prefs.edit().putInt("jump_delay", val).apply();
+            }
+            @Override public void onStartTrackingTouch(SeekBar seekBar) {}
+            @Override public void onStopTrackingTouch(SeekBar seekBar) {}
+        });
+        layout.addView(delayBar);
+
+        // Invert Scroll
+        CheckBox invertCb = new CheckBox(this);
+        invertCb.setText("Invert Scrolling Direction");
+        invertCb.setChecked(prefs.getBoolean("invert_scroll", false));
+        invertCb.setOnCheckedChangeListener((v, isChecked) -> prefs.edit().putBoolean("invert_scroll", isChecked).apply());
+        layout.addView(invertCb);
+
+        b.setView(layout);
+        b.setPositiveButton("Done", null);
+        b.show();
+    }
+
+    private void showThemeDialog() {
+        String[] colors = {"Teal Lagoon (Default)", "Emerald Green", "Neon Orange", "Dark Slate"};
+        AlertDialog.Builder b = new AlertDialog.Builder(this);
+        b.setTitle("Select Widget Theme");
+        b.setItems(colors, (dialog, which) -> {
+            String hex = "#E620B2AA";
+            if (which == 1) hex = "#E62ECC71";
+            if (which == 2) hex = "#E6E67E22";
+            if (which == 3) hex = "#E62C3E50";
+            prefs.edit().putString("widget_color", hex).apply();
+            Toast.makeText(this, "Theme Applied! Re-open floating bar to refresh.", Toast.LENGTH_SHORT).show();
+        });
+        b.show();
+    }
+
+    private void showAppsDialog() {
+        String[] targets = {"Instagram (Active)", "YouTube Shorts (Active)", "Facebook Reels (Active)"};
+        AlertDialog.Builder b = new AlertDialog.Builder(this);
+        b.setTitle("Selected Apps Engine");
+        b.setItems(targets, null);
+        b.setPositiveButton("OK", null);
+        b.show();
+    }
+
+    private void checkPermissions() {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M && !Settings.canDrawOverlays(this)) {
+            Intent intent = new Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION,
+                    Uri.parse("package:" + getPackageName()));
+            startActivity(intent);
+            Toast.makeText(this, "Allow overlay permission first", Toast.LENGTH_LONG).show();
+            autoSwitch.setChecked(false);
+            return;
         }
+        Intent intent = new Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS);
+        startActivity(intent);
     }
 }
