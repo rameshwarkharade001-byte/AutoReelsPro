@@ -27,5 +27,5 @@ android {
 }
 
 dependencies {
-    // Zero heavy dependencies to ensure ultra-fast and error-free compilation
+    implementation 'androidx.core:core:1.12.0'
 }
